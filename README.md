@@ -1,6 +1,8 @@
 # ChatHouse — Real-Time Chat Application
 
-A full-stack real-time chat application built with the MERN stack, featuring passwordless email authentication, instant messaging, online presence, and friend management.
+🚀 **Live Demo:** [Try ChatHouse](https://chathouse-henna.vercel.app/)
+
+ChatHouse is a real-time chat application built using the MERN stack that enables users to connect and communicate through instant messaging, passwordless email authentication, and friend management.
 
 ## Features
 
