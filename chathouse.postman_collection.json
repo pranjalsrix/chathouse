@@ -1,0 +1,653 @@
+{
+  "info": {
+    "name": "ChatHouse API",
+    "_postman_id": "chathouse-api-collection",
+    "description": "Complete API collection for the Varta MERN Chat Application.\n\n## Setup\n1. Set `base_url` to `http://localhost:5000`\n2. Run **Send OTP** → **Verify OTP** to get a JWT token\n3. The `token` variable auto-fills from the verify-otp response\n4. All protected routes use `{{token}}` automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string",
+      "description": "ChatHouse backend server URL"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token — auto-set after verify-otp or create-user"
+    },
+    {
+      "key": "test_email",
+      "value": "test@example.com",
+      "type": "string",
+      "description": "Email used for OTP testing"
+    },
+    {
+      "key": "test_username",
+      "value": "testuser",
+      "type": "string",
+      "description": "Username for new user registration"
+    },
+    {
+      "key": "friend_id",
+      "value": "",
+      "type": "string",
+      "description": "MongoDB ObjectId of another user (fill after searching)"
+    },
+    {
+      "key": "request_id",
+      "value": "",
+      "type": "string",
+      "description": "MongoDB ObjectId of a friend request"
+    },
+    {
+      "key": "message_user_id",
+      "value": "",
+      "type": "string",
+      "description": "MongoDB ObjectId of the user to chat with"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "description": "Passwordless authentication — email OTP flow",
+      "item": [
+        {
+          "name": "1. Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('OTP sent message', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.include('OTP');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/send-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "send-otp"
+              ]
+            },
+            "description": "Send a 6-digit OTP to the provided email address.\n\n**Rate limit:** 3 requests per 10 minutes per email.\n**OTP expires:** 5 minutes."
+          }
+        },
+        {
+          "name": "2. Verify OTP (existing user)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    console.log('✓ Token saved:', json.token.substring(0, 20) + '...');",
+                  "}",
+                  "if (json.newUser) {",
+                  "    console.log('New user detected — run Create User next');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verify-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "verify-otp"
+              ]
+            },
+            "description": "Verify the 6-digit OTP.\n\n**Response if existing user:** `{ token, user }`\n**Response if new user:** `{ newUser: true }` → run Create User next"
+          }
+        },
+        {
+          "name": "3. Create User (first login only)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    console.log('✓ Account created! Token saved.');",
+                  "    console.log('ChatHouse ID:', json.user.chatHouseId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"username\": \"{{test_username}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/create-user",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "create-user"
+              ]
+            },
+            "description": "Create a new user account after OTP is verified.\n\n**Username rules:** 3–20 chars, letters/numbers/underscores only.\n**Returns:** `{ token, user }` with auto-generated chatHouseId and avatar."
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Users",
+      "description": "User search and profile — all routes require JWT",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has username', () => pm.expect(json.username).to.be.a('string'));",
+                  "pm.test('Has chatHouseId', () => pm.expect(json.chatHouseId).to.match(/^CH-[A-F0-9]{6}$/));",
+                  "console.log('My profile:', json.username, '|', json.chatHouseId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Get the currently authenticated user's profile."
+          }
+        },
+        {
+          "name": "Search Users (by username)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns array', () => pm.expect(json).to.be.an('array'));",
+                  "if (json.length > 0) {",
+                  "    pm.collectionVariables.set('friend_id', json[0]._id);",
+                  "    pm.collectionVariables.set('message_user_id', json[0]._id);",
+                  "    console.log('First result:', json[0].username, '| ID saved to friend_id');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/search?q=alice",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "alice",
+                  "description": "Search query — min 2 chars"
+                }
+              ]
+            },
+            "description": "Search users by **@username**, **email**, or **ChatHouse ID**.\n\nExamples:\n- `q=alice` → matches username\n- `q=alice@gmail.com` → matches email\n- `q=CH-8F2A91` → matches ChatHouse ID\n\nExcludes the authenticated user from results."
+          }
+        },
+        {
+          "name": "Search Users (by ChatHouse ID)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/search?q=CH-",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "CH-",
+                  "description": "Prefix search on ChatHouse ID"
+                }
+              ]
+            },
+            "description": "Search by ChatHouse ID prefix (e.g. `CH-8F2A91`)"
+          }
+        },
+        {
+          "name": "Search Users (by email)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/users/search?q=gmail.com",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "gmail.com"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Friends",
+      "description": "Friend system — send, accept, reject, cancel, remove, and list friends",
+      "item": [
+        {
+          "name": "Get Friends & Requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Has friends array', () => pm.expect(json.friends).to.be.an('array'));",
+                  "pm.test('Has incoming array', () => pm.expect(json.incoming).to.be.an('array'));",
+                  "pm.test('Has outgoing array', () => pm.expect(json.outgoing).to.be.an('array'));",
+                  "console.log(`Friends: ${json.friends.length} | Incoming: ${json.incoming.length} | Outgoing: ${json.outgoing.length}`);",
+                  "if (json.incoming.length > 0) {",
+                  "    pm.collectionVariables.set('request_id', json.incoming[0]._id);",
+                  "    console.log('Request ID saved:', json.incoming[0]._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/friends",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends"
+              ]
+            },
+            "description": "Returns:\n- `friends` — accepted friends list with profile data\n- `incoming` — pending requests received\n- `outgoing` — pending requests sent"
+          }
+        },
+        {
+          "name": "Send Friend Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "console.log(json.message);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiverId\": \"{{friend_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friends/request",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends",
+                "request"
+              ]
+            },
+            "description": "Send a friend request to another user.\n\nSet `friend_id` variable first (from Search Users response)."
+          }
+        },
+        {
+          "name": "Accept Friend Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "console.log(pm.response.json().message);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{request_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friends/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends",
+                "accept"
+              ]
+            },
+            "description": "Accept an incoming friend request.\n\nSet `request_id` variable from **Get Friends & Requests** → `incoming[0]._id`"
+          }
+        },
+        {
+          "name": "Reject Friend Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{request_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friends/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends",
+                "reject"
+              ]
+            },
+            "description": "Reject an incoming friend request."
+          }
+        },
+        {
+          "name": "Cancel Outgoing Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiverId\": \"{{friend_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friends/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends",
+                "cancel"
+              ]
+            },
+            "description": "Cancel a pending friend request you sent."
+          }
+        },
+        {
+          "name": "Remove Friend",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"friendId\": \"{{friend_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/friends/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "friends",
+                "remove"
+              ]
+            },
+            "description": "Remove an existing friend (deletes the accepted friend request)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Messages",
+      "description": "Fetch conversation history between two users",
+      "item": [
+        {
+          "name": "Get Conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Returns array', () => pm.expect(json).to.be.an('array'));",
+                  "console.log(`${json.length} messages loaded`);",
+                  "if (json.length > 0) {",
+                  "    const last = json[json.length - 1];",
+                  "    console.log('Last message:', last.text, '| seen:', last.seen);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/messages/{{message_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "messages",
+                "{{message_user_id}}"
+              ]
+            },
+            "description": "Get all messages between the authenticated user and `message_user_id`.\n\nMessages are sorted oldest → newest (limit: 200).\nAlso marks messages from the other user as **seen**."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🩺 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('API is running', () => {",
+                  "    pm.expect(pm.response.json().message).to.include('running');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Simple health check — confirms the server is running."
+          }
+        }
+      ]
+    }
+  ]
+}

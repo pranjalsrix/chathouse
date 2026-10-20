@@ -1,0 +1,17 @@
+{
+  "name": "chathouse",
+  "version": "1.0.0",
+  "description": "ChatHouse – Real-Time Chat Application",
+  "scripts": {
+    "install-all": "npm install && npm install --prefix server && npm install --prefix client",
+    "build": "npm install --prefix client && npm run build --prefix client",
+    "start": "npm run start --prefix server",
+    "dev": "concurrently \"npm run start:server\" \"npm run start:client\"",
+    "start:server": "npm run dev --prefix server",
+    "start:client": "npm run dev --prefix client",
+    "seed": "npm run seed --prefix server"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
